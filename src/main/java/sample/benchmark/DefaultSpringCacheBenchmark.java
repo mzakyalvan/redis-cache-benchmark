@@ -3,6 +3,7 @@ package sample.benchmark;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -23,10 +24,14 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager.RedisCacheManagerBuilder;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
 import sample.BenchmarkRunner;
 import sample.model.AirlineStatistic;
 
+/**
+ * @author zakyalvan
+ */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
@@ -34,7 +39,9 @@ public class DefaultSpringCacheBenchmark {
   private CacheManager defaultCacheManager;
   private CacheManager jacksonCacheManager;
 
-  private static final String CACHE_NAME = "airline-statistic";
+  private static final String DEFAULT_CACHE_NAME = "default-airline-statistic";
+  private static final String JACKSON_CACHE_NAME = "jackson-airline-statistic";
+
   private static final String WRITE_CACHE_KEY = "write-cache-key";
   private static final String READ_CACHE_KEY = "read-cache-key";
 
@@ -44,18 +51,20 @@ public class DefaultSpringCacheBenchmark {
   public void initialize() throws Exception {
     ConfigurableApplicationContext applicationContext = SpringApplication.run(BenchmarkRunner.class);
 
-    Set<String> initialCaches = Collections.singleton(CACHE_NAME);
+    Set<String> initialCaches = new HashSet<>();
+    initialCaches.add(DEFAULT_CACHE_NAME);
+    initialCaches.add(JACKSON_CACHE_NAME);
 
-    RedisConnectionFactory connections = applicationContext.getBean(RedisConnectionFactory.class);
+    RedisConnectionFactory connectionFactory = applicationContext.getBean(RedisConnectionFactory.class);
 
-    this.defaultCacheManager = RedisCacheManagerBuilder.fromConnectionFactory(connections)
+    this.defaultCacheManager = RedisCacheManagerBuilder.fromConnectionFactory(connectionFactory)
         .initialCacheNames(initialCaches)
         .build();
 
     ObjectMapper objectMapper = new ObjectMapper();
     RedisCacheConfiguration cacheConfiguration = RedisCacheConfiguration.defaultCacheConfig()
-        .serializeValuesWith(SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(objectMapper)));
-    this.jacksonCacheManager = RedisCacheManagerBuilder.fromConnectionFactory(connections)
+        .serializeValuesWith(SerializationPair.fromSerializer(new Jackson2JsonRedisSerializer<>(AirlineStatistic[].class)));
+    this.jacksonCacheManager = RedisCacheManagerBuilder.fromConnectionFactory(connectionFactory)
         .cacheDefaults(cacheConfiguration)
         .initialCacheNames(initialCaches)
         .build();
@@ -63,34 +72,32 @@ public class DefaultSpringCacheBenchmark {
     Resource jsonResource = applicationContext.getResource("classpath:airlines.json");
     this.airlineStatistics = objectMapper.readValue(jsonResource.getFile(), AirlineStatistic[].class);
 
-    defaultCacheManager.getCache(CACHE_NAME).put(READ_CACHE_KEY, this.airlineStatistics);
-    defaultCacheManager.getCache(CACHE_NAME).evict(WRITE_CACHE_KEY);
+    defaultCacheManager.getCache(DEFAULT_CACHE_NAME).put(READ_CACHE_KEY, this.airlineStatistics);
+    jacksonCacheManager.getCache(JACKSON_CACHE_NAME).put(READ_CACHE_KEY, this.airlineStatistics);
+
+    defaultCacheManager.getCache(DEFAULT_CACHE_NAME).evict(WRITE_CACHE_KEY);
+    jacksonCacheManager.getCache(JACKSON_CACHE_NAME).evict(WRITE_CACHE_KEY);
   }
 
   @Benchmark
   public void defaultWriteBenchmark(Blackhole blackhole) throws Exception {
-    defaultCacheManager.getCache(CACHE_NAME).put(WRITE_CACHE_KEY, airlineStatistics);
+    defaultCacheManager.getCache(DEFAULT_CACHE_NAME).put(WRITE_CACHE_KEY, airlineStatistics);
     blackhole.consume(1);
   }
 
   @Benchmark
-  public AirlineStatistic[] defultReadBenchmark() {
-    return defaultCacheManager.getCache(CACHE_NAME).get(READ_CACHE_KEY, AirlineStatistic[].class);
+  public AirlineStatistic[] defaultReadBenchmark() {
+    return defaultCacheManager.getCache(DEFAULT_CACHE_NAME).get(READ_CACHE_KEY, AirlineStatistic[].class);
   }
 
   @Benchmark
   public void jacksonWriteBenchmark(Blackhole blackhole) throws Exception {
-    jacksonCacheManager.getCache(CACHE_NAME).put(WRITE_CACHE_KEY, airlineStatistics);
+    jacksonCacheManager.getCache(JACKSON_CACHE_NAME).put(WRITE_CACHE_KEY, airlineStatistics);
     blackhole.consume(1);
   }
 
   @Benchmark
   public AirlineStatistic[] jacksonReadBenchmark() {
-    return jacksonCacheManager.getCache(CACHE_NAME).get(READ_CACHE_KEY, AirlineStatistic[].class);
-  }
-
-  @TearDown(Level.Trial)
-  public void tearDown() {
-    defaultCacheManager.getCache(CACHE_NAME).clear();
+    return jacksonCacheManager.getCache(JACKSON_CACHE_NAME).get(READ_CACHE_KEY, AirlineStatistic[].class);
   }
 }
