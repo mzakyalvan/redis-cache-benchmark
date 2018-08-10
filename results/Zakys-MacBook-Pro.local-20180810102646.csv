@@ -1,0 +1,5 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit"
+"sample.benchmark.DefaultSpringCacheBenchmark.defaultReadBenchmark","avgt",1,25,216.296703,4.246956,"ms/op"
+"sample.benchmark.DefaultSpringCacheBenchmark.defaultWriteBenchmark","avgt",1,25,487.305594,30.854784,"ms/op"
+"sample.benchmark.DefaultSpringCacheBenchmark.jacksonReadBenchmark","avgt",1,25,233.030427,46.691397,"ms/op"
+"sample.benchmark.DefaultSpringCacheBenchmark.jacksonWriteBenchmark","avgt",1,25,132.408529,5.772130,"ms/op"
